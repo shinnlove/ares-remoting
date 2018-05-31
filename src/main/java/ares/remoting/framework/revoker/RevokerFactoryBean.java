@@ -69,6 +69,7 @@ public class RevokerFactoryBean implements FactoryBean, InitializingBean {
         registerCenter4Consumer.initProviderMap(remoteAppKey, groupName);
 
         //初始化Netty Channel(从Zookeeper配置中心拉取到多少服务，就建立多少netty-client，维持在ip地址对应ArrayBlockingQueue<Channel>的Map中)
+        // `providerMap`是从Zookeeper中拉取的
         Map<String, List<ProviderService>> providerMap = registerCenter4Consumer.getServiceMetaDataMap4Consume();
         if (MapUtils.isEmpty(providerMap)) {
             throw new RuntimeException("service provider list is empty.");
@@ -84,6 +85,8 @@ public class RevokerFactoryBean implements FactoryBean, InitializingBean {
         invoker.setServiceItf(targetInterface);
         invoker.setRemoteAppKey(remoteAppKey);
         invoker.setGroupName(groupName);
+
+        // 将消费者信息注册到注册中心
         registerCenter4Consumer.registerInvoker(invoker);
     }
 

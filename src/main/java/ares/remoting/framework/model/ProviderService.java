@@ -13,19 +13,23 @@ import java.lang.reflect.Method;
  */
 public class ProviderService implements Serializable {
 
+    /** 服务接口的类字面变量 */
     private Class<?> serviceItf;
     /** transient 关键字修饰的变量是不会被序列化的 */
     private transient Object serviceObject;
     @JsonIgnore
     private transient Method serviceMethod;
+    /** 服务所在IP地址 */
     private String serverIp;
+    /** 服务所在端口号 */
     private int serverPort;
+    /** 服务调用超时时间 */
     private long timeout;
     //该服务提供者权重
     private int weight;
     //服务端线程数
     private int workerThreads;
-    //服务提供者唯一标识
+    //服务提供者唯一标识(应用名)
     private String appKey;
     //服务分组组名
     private String groupName;
