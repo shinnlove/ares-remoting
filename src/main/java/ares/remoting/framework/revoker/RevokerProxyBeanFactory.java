@@ -63,7 +63,7 @@ public class RevokerProxyBeanFactory implements InvocationHandler {
 
         //声明调用AresRequest对象,AresRequest表示发起一次调用所包含的信息
         final AresRequest request = new AresRequest();
-        //设置本次调用的唯一标识
+        //设置本次调用的唯一标识(客户端调用使用UUID也无所谓)
         request.setUniqueKey(UUID.randomUUID().toString() + "-" + Thread.currentThread().getId());
         //设置本次调用的服务提供者信息
         request.setProviderService(newProvider);
@@ -87,13 +87,15 @@ public class RevokerProxyBeanFactory implements InvocationHandler {
             String serverIp = request.getProviderService().getServerIp();
             int serverPort = request.getProviderService().getServerPort();
             InetSocketAddress inetSocketAddress = new InetSocketAddress(serverIp, serverPort);
+
             //提交本次调用信息到线程池fixedThreadPool,发起调用
             Future<AresResponse> responseFuture = fixedThreadPool.submit(RevokerServiceCallable.of(inetSocketAddress, request));
-            //获取调用的返回结果
+            //获取调用的返回结果(阻塞若干秒等待返回)
             AresResponse response = responseFuture.get(request.getInvokeTimeout(), TimeUnit.MILLISECONDS);
             if (response != null) {
                 return response.getResult();
             }
+
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

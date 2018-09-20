@@ -177,12 +177,16 @@ public class NettyChannelPoolFactory {
                         }
                     });
 
+            // 发起客户端对服务端的连接，并同步等待
             ChannelFuture channelFuture = bootstrap.connect().sync();
+            // !!!重要：Future可以返回连接通道本身
             final Channel newChannel = channelFuture.channel();
+
+            // `isSuccessHolder`是当前线程想要等待注册结果的标记，这里用`CountDownLatch`来做同步等待连接建立
+            final List<Boolean> isSuccessHolder = Lists.newArrayListWithCapacity(1);
             final CountDownLatch connectedLatch = new CountDownLatch(1);
 
-            final List<Boolean> isSuccessHolder = Lists.newArrayListWithCapacity(1);
-            //监听Channel是否建立成功
+            // 监听Channel是否建立成功(建议使用Listener来做异步监听)
             channelFuture.addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
@@ -198,14 +202,18 @@ public class NettyChannelPoolFactory {
                 }
             });
 
+            // 客户端线程等待异步监听回调处理`CountDownLatch`
             connectedLatch.await();
+
             //如果Channel建立成功,返回新建的Channel
             if (isSuccessHolder.get(0)) {
                 return newChannel;
             }
         } catch (Exception e) {
+            // 建立出错直接抛错
             throw new RuntimeException(e);
         }
+        // Success == false 直接返回null
         return null;
     }
 

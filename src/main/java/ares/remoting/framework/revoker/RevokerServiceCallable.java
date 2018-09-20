@@ -13,7 +13,9 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Netty 请求发起线程
+ * RPC服务调用异步任务Task，所有的RPC服务调用都放在RPC服务线程池中进行。
+ *
+ * 当前任务Task使用`Netty Client`连接方式、对服务端发起异步IO的RPC调用，将结果集写入阻塞队列中等待获取。
  *
  * @author liyebing created on 17/2/10.
  * @version $Id$
@@ -54,17 +56,34 @@ public class RevokerServiceCallable implements Callable<AresResponse> {
                 channel = blockingQueue.poll(request.getInvokeTimeout(), TimeUnit.MILLISECONDS);
                 if (channel == null) {
                     //若队列中没有可用的Channel,则重新注册一个Channel
+                    // 若注册失败，直接抛NPE，会进入catch中，不太合适(后期可以改造下)
                     channel = NettyChannelPoolFactory.channelPoolFactoryInstance().registerChannel(inetSocketAddress);
                 }
             }
 
-            //将本次调用的信息写入Netty通道,发起异步调用
+            /**
+             * ========客户端调用线程Task========
+             * 特别注意，因为Netty底层是异步的，而发起请求调用是同步的——指的是在给定的时间内、阻塞线程、直到返回成功|失败|超时这样的结果。
+             * 而Netty底层是异步，所以客户端发起同步调用`异转同`需要做如下几件事：
+             * 1、把服务请求信息写入通道中、并同步等待通道写入成功(含消息编码、Netty用户缓冲区写入系统网卡驱动缓冲区)；
+             * 2、从`UUID/TraceId映射`的`RPC响应结果阻塞队列`中获取服务调用结果(poll till timeout)；
+             *
+             * ==========以下内容为异步执行（不在调用线程中的客户端与服务端交互）==========
+             * 当服务端接收到消息后，会进行解码、反射调用服务、封装调用结果写入通道、编码等步骤，消息会发送到客户端。
+             * 此时客户端接收到调用结果后，会使用`NettyClientInvokeHandler`进行解码、将服务调用结果写入`UUID/TraceId映射`的`RPC响应结果阻塞队列`中，并带上时间戳!!!
+             *
+             * ========客户端调用线程Task========
+             * 调用线程Task如果在timeout时间段内从结果队列中取出了结果，将结果集返回给上层调用。
+             */
+
+            // 将本次调用的信息写入Netty通道,发起异步调用
             ChannelFuture channelFuture = channel.writeAndFlush(request);
             channelFuture.syncUninterruptibly();
 
             //从返回结果容器中获取返回结果,同时设置等待超时时间为invokeTimeout
             long invokeTimeout = request.getInvokeTimeout();
             return RevokerResponseHolder.getValue(request.getUniqueKey(), invokeTimeout);
+
         } catch (Exception e) {
             logger.error("service invoke error.", e);
         } finally {
