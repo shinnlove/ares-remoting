@@ -24,15 +24,32 @@ public class RevokerServiceCallable implements Callable<AresResponse> {
 
     private static final Logger logger = LoggerFactory.getLogger(RevokerServiceCallable.class);
 
-    private Channel channel;
+    /** 一个目标服务地址，如：192.168.0.110，被封装成`InetSocketAddress`对象 */
     private InetSocketAddress inetSocketAddress;
+
+    /** 建立在某个IP地址上的netty通道 */
+    private Channel channel;
+
+    /** 请求调用对象 */
     private AresRequest request;
 
+    /**
+     * 生成RPC远程调用异步任务的静态方法。
+     *
+     * @param inetSocketAddress
+     * @param request
+     * @return
+     */
     public static RevokerServiceCallable of(InetSocketAddress inetSocketAddress, AresRequest request) {
         return new RevokerServiceCallable(inetSocketAddress, request);
     }
 
-
+    /**
+     * 这个标准构造函数可以设置为私有的。
+     *
+     * @param inetSocketAddress
+     * @param request
+     */
     public RevokerServiceCallable(InetSocketAddress inetSocketAddress, AresRequest request) {
         this.inetSocketAddress = inetSocketAddress;
         this.request = request;
@@ -94,4 +111,5 @@ public class RevokerServiceCallable implements Callable<AresResponse> {
         }
         return null;
     }
+
 }

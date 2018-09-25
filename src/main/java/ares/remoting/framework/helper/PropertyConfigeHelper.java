@@ -8,6 +8,8 @@ import java.io.InputStream;
 import java.util.Properties;
 
 /**
+ * 从`properties`噢诶之文件
+ *
  * @author liyebing created on 17/2/2.
  * @version $Id$
  */

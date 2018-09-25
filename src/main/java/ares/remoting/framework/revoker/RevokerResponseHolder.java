@@ -17,9 +17,10 @@ import java.util.concurrent.TimeUnit;
  */
 public class RevokerResponseHolder {
 
-    //服务返回结果Map
+    /** 服务返回结果Map，key是一次服务的TraceId/UUID */
     private static final Map<String, AresResponseWrapper> responseMap = Maps.newConcurrentMap();
-    //清除过期的返回结果
+
+    /** 单线程池，清理超时过期的返回结果 */
     private static final ExecutorService removeExpireKeyExecutor = Executors.newSingleThreadExecutor();
 
     static {
@@ -34,6 +35,7 @@ public class RevokerResponseHolder {
                             if (isExpire) {
                                 responseMap.remove(entry.getKey());
                             }
+                            // 10毫秒一次
                             Thread.sleep(10);
                         }
                     } catch (Throwable e) {
@@ -46,7 +48,9 @@ public class RevokerResponseHolder {
     }
 
     /**
-     * 初始化返回结果容器,requestUniqueKey唯一标识本次调用
+     * Step1：（RPC调用用户线程）初始化返回结果容器,requestUniqueKey唯一标识本次调用
+     *
+     * 这个方法是被`跑RPC远程调用Task`的线程在执行call()方法中代码的第一句时候初始化的，所以后续不用担心NPE。
      *
      * @param requestUniqueKey
      */
@@ -54,9 +58,10 @@ public class RevokerResponseHolder {
         responseMap.put(requestUniqueKey, AresResponseWrapper.of());
     }
 
-
     /**
-     * 将Netty调用异步返回结果放入阻塞队列
+     * Step2：（RPC调用用户线程）将Netty调用异步返回结果放入阻塞队列。
+     *
+     * 这个方法是被`NIO线程`运行的`pipeline`中的`handler`所调用的，将服务调用结果放入结果集Map中。
      *
      * @param response
      */
@@ -64,13 +69,17 @@ public class RevokerResponseHolder {
         long currentTime = System.currentTimeMillis();
         AresResponseWrapper responseWrapper = responseMap.get(response.getUniqueKey());
         responseWrapper.setResponseTime(currentTime);
+        // !!!add背后调用offer、如果队列满了直接返回false，而不是put会阻塞直到有可用空间
         responseWrapper.getResponseQueue().add(response);
         responseMap.put(response.getUniqueKey(), responseWrapper);
     }
 
-
     /**
-     * 从阻塞队列中获取Netty异步返回的结果值
+     * Step3：（RPC调用用户线程）从阻塞队列中获取Netty异步返回的结果值。
+     *
+     * 这个方法是被`跑RPC远程调用Task`的线程调用的。
+     *
+     * 特别注意：超时时间是在获取阻塞队列中结果集时候的最长等待时间。
      *
      * @param requestUniqueKey
      * @param timeout
@@ -78,14 +87,15 @@ public class RevokerResponseHolder {
      */
     public static AresResponse getValue(String requestUniqueKey, long timeout) {
         AresResponseWrapper responseWrapper = responseMap.get(requestUniqueKey);
+        // 特别注意：必须保证服务调用前先预创建一个PlaceHolder在Map中，否则会有可能NPE!!!
         try {
             return responseWrapper.getResponseQueue().poll(timeout, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         } finally {
+            // 无论获取成功与否，都清除掉这个结果集
             responseMap.remove(requestUniqueKey);
         }
     }
-
 
 }
